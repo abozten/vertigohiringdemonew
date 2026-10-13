@@ -17,6 +17,9 @@ namespace WheelOfFortune.UI
         [SerializeField] private GameObject _emptyState;
 
         private readonly Dictionary<RewardDefinition, RewardEntryView> _entries = new();
+        private ScrollRect _scroll;
+
+        private void Awake() => _scroll = _content.GetComponentInParent<ScrollRect>();
 
         public void Add(RewardDefinition reward, int newTotal, Vector3 fromPosition, Action onComplete)
         {
@@ -28,6 +31,7 @@ namespace WheelOfFortune.UI
                 if (_emptyState != null) _emptyState.SetActive(false);
                 LayoutRebuilder.ForceRebuildLayoutImmediate(_content); // so the new entry has its final position
             }
+            ScrollIntoView((RectTransform)entry.transform); // the icon must not fly to an entry hidden by the mask
 
             Transform flying = _flyingIcon.transform;
             _flyingIcon.sprite = reward.Icon;
@@ -54,6 +58,28 @@ namespace WheelOfFortune.UI
                 Destroy(entry.gameObject);
             _entries.Clear();
             if (_emptyState != null) _emptyState.SetActive(true);
+            if (_scroll != null) _scroll.verticalNormalizedPosition = 1f;
+        }
+
+        /// <summary>Scrolls the minimum distance needed so the target entry is fully visible.</summary>
+        private void ScrollIntoView(RectTransform target)
+        {
+            if (_scroll == null) return;
+            float viewHeight = _scroll.viewport.rect.height;
+            float overflow = _content.rect.height - viewHeight;
+            if (overflow <= 0f) return;
+
+            // Distances measured downwards from the top of the content.
+            Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(_content, target);
+            float top = _content.rect.yMax - bounds.max.y;
+            float bottom = _content.rect.yMax - bounds.min.y;
+            float offset = (1f - _scroll.verticalNormalizedPosition) * overflow;
+
+            if (top < offset) offset = top;
+            else if (bottom > offset + viewHeight) offset = bottom - viewHeight;
+
+            _scroll.StopMovement();
+            _scroll.verticalNormalizedPosition = 1f - Mathf.Clamp01(offset / overflow);
         }
     }
 }
