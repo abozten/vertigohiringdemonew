@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d1bfe01d633e63a4985b5e10681823fc, type: 3}
+  m_Name: wheel_golden
+  m_EditorClassIdentifier: WheelOfFortune.Core::WheelOfFortune.Core.WheelDefinition
+  _title: GOLDEN SPIN
+  _titleColor: {r: 1, g: 0.8, b: 0.25, a: 1}
+  _baseSprite: {fileID: 21300000, guid: 5cd2b35cfd079834e80c660645d9deb6, type: 3}
+  _indicatorSprite: {fileID: 21300000, guid: 6a7ec6d6aaf57bb47a0765f9f5620830, type: 3}
+  _slices:
+  - Reward: {fileID: 11400000, guid: 37e7b0c2435df70468a7706ed8670d0d, type: 2}
+    BaseAmount: 100
+  - Reward: {fileID: 11400000, guid: 599a2bd060c58dd4c9ed74786a5cdb5e, type: 2}
+    BaseAmount: 5000
+  - Reward: {fileID: 11400000, guid: 0fd6cfd046fb6694bba6cea5453c5f5f, type: 2}
+    BaseAmount: 1
+  - Reward: {fileID: 11400000, guid: 1371d184b8151014e8c2f8a2857e0166, type: 2}
+    BaseAmount: 1
+  - Reward: {fileID: 11400000, guid: f917c6b6ccffeae418f3f28bbd372082, type: 2}
+    BaseAmount: 1
+  - Reward: {fileID: 11400000, guid: 31997cb71db443e47a3181281ad1c7e5, type: 2}
+    BaseAmount: 1
+  - Reward: {fileID: 11400000, guid: f8329c21c5f41fc46acbb4798098a2d9, type: 2}
+    BaseAmount: 1
+  - Reward: {fileID: 11400000, guid: 4b827f8f6390c2446aa307aed0d13804, type: 2}
+    BaseAmount: 1

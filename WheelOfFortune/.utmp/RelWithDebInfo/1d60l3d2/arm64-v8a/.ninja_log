@@ -1,0 +1,12 @@
+# ninja log v5
+185	1021	8133558929641825	FramePacing/CMakeFiles/swappywrapper.dir/UnitySwappyWrapper.cpp.o	d9581bc8cf7d7e9a
+1027	1482	8133558934033536	C:/Users/abozt/Downloads/vertigohiringdemo/WheelOfFortune/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1d60l3d2/obj/arm64-v8a/libswappywrapper.so	2be7e752f6adfa2d
+85	2905	8133558948444521	GameActivity/CMakeFiles/game.dir/UGAEntry.cpp.o	90b535a13d1287fb
+108	2938	8133558948483348	GameActivity/CMakeFiles/game.dir/UGAInputKeyEvent.cpp.o	ab0035b729edd70d
+2	2957	8133558949033287	GameActivity/CMakeFiles/game.dir/UGAConfiguration.cpp.o	2e876e27b02e234f
+159	2984	8133558949343388	GameActivity/CMakeFiles/game.dir/UGAInputMotionEvent.cpp.o	e55a4a5fcf83cb3e
+44	3067	8133558950182732	GameActivity/CMakeFiles/game.dir/UGADebug.cpp.o	b0b19a20cf4a2e2
+136	3283	8133558952354672	GameActivity/CMakeFiles/game.dir/UGASoftKeyboard.cpp.o	c1a02d970e11f5c3
+63	3362	8133558953157258	GameActivity/CMakeFiles/game.dir/UGAInput.cpp.o	d834198b53572114
+25	3497	8133558954449820	GameActivity/CMakeFiles/game.dir/UGAApplication.cpp.o	9256a017fdbbb8d8
+3498	3709	8133558956594177	C:/Users/abozt/Downloads/vertigohiringdemo/WheelOfFortune/Library/Bee/Android/Prj/IL2CPP/Gradle/unityLibrary/build/intermediates/cxx/RelWithDebInfo/1d60l3d2/obj/arm64-v8a/libgame.so	618c3e9ba7031f1b

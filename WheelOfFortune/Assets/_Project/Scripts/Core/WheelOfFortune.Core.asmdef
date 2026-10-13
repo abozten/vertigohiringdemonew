@@ -1,0 +1,6 @@
+{
+    "name": "WheelOfFortune.Core",
+    "rootNamespace": "WheelOfFortune.Core",
+    "references": [],
+    "autoReferenced": true
+}

@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cce6fba15dca8f442b2b8cc86329a8a1, type: 3}
+  m_Name: game_settings
+  m_EditorClassIdentifier: WheelOfFortune.Core::WheelOfFortune.Core.GameSettings
+  _normalWheel: {fileID: 11400000, guid: ac6f026f1a85cd64ba808e738d289642, type: 2}
+  _safeWheel: {fileID: 11400000, guid: bbe56336a32bf8c4eb000cb59ab33f41, type: 2}
+  _superWheel: {fileID: 11400000, guid: f27ac6644b8b114469bff7fff4170556, type: 2}
+  _safeZoneInterval: 5
+  _superZoneInterval: 30
+  _rewardGrowthPerZone: 0.1
