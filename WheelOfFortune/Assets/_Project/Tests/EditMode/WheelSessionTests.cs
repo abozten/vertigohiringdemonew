@@ -131,5 +131,30 @@ namespace WheelOfFortune.Tests
             Assert.IsFalse(session.IsGameOver);
             Assert.IsEmpty(session.Rewards);
         }
+
+        [Test]
+        public void MissingReward_IsReported_AndNeverPicked()
+        {
+            WheelDefinition wheel = _settings.GetWheel(ZoneType.Normal);
+            var slices = new WheelSlice[WheelDefinition.SliceCount];
+            slices[3] = new WheelSlice { Reward = _gold, BaseAmount = 100 }; // only slice 3 is filled
+            wheel.Init("Test", Color.white, null, null, slices);
+
+            Assert.AreEqual(WheelDefinition.SliceCount - 1, wheel.GetProblems().Count);
+            Assert.AreEqual(1, wheel.GetSlice(0).BaseAmount, "empty amounts are raised to the minimum");
+            Assert.AreEqual(3, new WheelSession(_settings, _ => 0).PickSlice());
+            Assert.AreEqual(3, new WheelSession(_settings, max => max - 1).PickSlice());
+            Assert.Throws<System.InvalidOperationException>(() => new WheelSession(_settings, _ => 0).Resolve(0));
+        }
+
+        [Test]
+        public void ShortSliceArray_IsResized()
+        {
+            var wheel = ScriptableObject.CreateInstance<WheelDefinition>();
+            wheel.Init("Test", Color.white, null, null, new WheelSlice[2]);
+
+            Assert.DoesNotThrow(() => wheel.GetSlice(WheelDefinition.SliceCount - 1));
+            Assert.IsFalse(wheel.IsFilled(WheelDefinition.SliceCount - 1));
+        }
     }
 }

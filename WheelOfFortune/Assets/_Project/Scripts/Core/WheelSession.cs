@@ -32,7 +32,20 @@ namespace WheelOfFortune.Core
         public int GetAmount(int sliceIndex) =>
             _rules.GetAmount(CurrentWheel.GetSlice(sliceIndex).BaseAmount, Zone);
 
-        public int PickSlice() => _randomIndex(WheelDefinition.SliceCount);
+        /// <summary>Picks uniformly among slices that have a reward, so a half-edited wheel cannot land on an empty one.</summary>
+        public int PickSlice()
+        {
+            WheelDefinition wheel = CurrentWheel;
+            int filled = 0;
+            for (int i = 0; i < WheelDefinition.SliceCount; i++)
+                if (wheel.IsFilled(i)) filled++;
+            if (filled == 0) throw new InvalidOperationException($"Wheel '{wheel.name}' has no rewards.");
+
+            int pick = _randomIndex(filled);
+            for (int i = 0; i < WheelDefinition.SliceCount; i++)
+                if (wheel.IsFilled(i) && pick-- == 0) return i;
+            throw new InvalidOperationException("Unreachable."); // pick < filled, so the loop always returns
+        }
 
         /// <summary>Applies the slice result: bomb wipes everything, otherwise collect and go to the next zone.</summary>
         public RewardDefinition Resolve(int sliceIndex)
@@ -40,6 +53,8 @@ namespace WheelOfFortune.Core
             if (IsGameOver) throw new InvalidOperationException("Game is over. Call Restart first.");
 
             RewardDefinition reward = CurrentWheel.GetSlice(sliceIndex).Reward;
+            if (reward == null)
+                throw new InvalidOperationException($"Slice {sliceIndex} of wheel '{CurrentWheel.name}' has no reward.");
             if (reward.IsBomb)
             {
                 _rewards.Clear();

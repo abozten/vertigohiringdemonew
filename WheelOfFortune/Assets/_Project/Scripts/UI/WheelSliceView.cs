@@ -14,6 +14,14 @@ namespace WheelOfFortune.UI
 
         public void Show(RewardDefinition reward, int amount)
         {
+            // An unassigned slice (wheel still being edited) shows as an empty socket.
+            _icon.enabled = reward != null;
+            if (reward == null)
+            {
+                _amountText.text = string.Empty;
+                return;
+            }
+
             _icon.sprite = reward.Icon;
             // Cropped sprites use a frame suited to their silhouette. Keep the icon and
             // quantity in separate bands inside the circular socket.
