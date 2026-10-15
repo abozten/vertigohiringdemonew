@@ -31,7 +31,13 @@ namespace WheelOfFortune.EditorTools
         private const float WheelSize = 600f;
         private const float SliceRadius = WheelSize * 0.295f; // measured from the wheel art: hole centers sit at 29.5% of its width
         private const int ZoneLabelCount = 15;
+        private const int ZoneVisibleCount = 9;
         private const float ZoneItemWidth = 68f;
+        // Every column shares the stage's vertical axis: side panels sit at +/- ColumnX, the wheel at 0.
+        private const float ColumnX = 495f;
+        private const float ColumnWidth = 330f;
+        private const string FontPath = "Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset";
+        private const string HeadingMaterialPath = Root + "/Art/Fonts/LiberationSans SDF - Heading.mat";
         private const float TitleSize = 42f;
         private const float LabelSize = 24f;
         private const float ValueSize = 30f;
@@ -320,6 +326,27 @@ namespace WheelOfFortune.EditorTools
 
         private static Sprite Common(string spriteName) => LoadSprite(CommonSprites, spriteName);
 
+        /// <summary>Font material with a soft drop shadow, shared by titles, numbers and button labels.</summary>
+        private static Material HeadingMaterial()
+        {
+            var font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontPath);
+            var material = AssetDatabase.LoadAssetAtPath<Material>(HeadingMaterialPath);
+            if (material == null)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(HeadingMaterialPath)!);
+                material = new Material(font.material);
+                AssetDatabase.CreateAsset(material, HeadingMaterialPath);
+            }
+            material.CopyPropertiesFromMaterial(font.material);
+            material.shaderKeywords = font.material.shaderKeywords;
+            material.EnableKeyword(ShaderUtilities.Keyword_Underlay);
+            material.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(0f, 0f, 0f, 0.65f));
+            material.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, -0.9f);
+            material.SetFloat(ShaderUtilities.ID_UnderlaySoftness, 0.35f);
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
         // ---------- Prefabs ----------
 
         private static WheelSliceView CreateSlicePrefab()
@@ -329,7 +356,7 @@ namespace WheelOfFortune.EditorTools
             Image icon = Img(Rect("ui_image_slice_icon_value", root, new Vector2(0f, 12f), new Vector2(54f, 54f)), null);
             TMP_Text amount = Text(Rect("ui_text_slice_amount_value", root, new Vector2(0f, -28f), new Vector2(84f, 28f)),
                 "x1", 21f, Color.white);
-            amount.fontStyle = FontStyles.Bold;
+            Heading(amount);
             Set(view, ("_icon", icon), ("_amountText", amount));
             return SavePrefab(root, "ui_wheel_slice").GetComponent<WheelSliceView>();
         }
@@ -405,14 +432,15 @@ namespace WheelOfFortune.EditorTools
             Img(Stretch("ui_image_background", canvas), null).color = new Color(0.035f, 0.05f, 0.075f);
             // A fixed-size composition stays together as Expand adds space at the edges.
             RectTransform stage = Rect("ui_stage", canvas, Vector2.zero, new Vector2(1320f, 940f));
-            Image atmosphere = Img(Rect("ui_image_atmosphere", stage, new Vector2(160f, -40f), new Vector2(1380f, 1000f)),
+            // Wide, faint light pooled behind the whole stage ties the three columns together.
+            Image atmosphere = Img(Rect("ui_image_atmosphere", stage, new Vector2(0f, -60f), new Vector2(1900f, 1300f)),
                 Common("star_glow_alpha"));
-            atmosphere.color = new Color(0.18f, 0.34f, 0.52f, 0.14f);
-            Img(Rect("ui_image_header_divider", stage, new Vector2(0f, 268f), new Vector2(1220f, 2f)), null)
-                .color = new Color(0.35f, 0.46f, 0.60f, 0.2f);
+            atmosphere.preserveAspect = false;
+            atmosphere.color = new Color(0.22f, 0.36f, 0.55f, 0.16f);
 
             ZoneBarView zoneBar = CreateZoneBar(stage);
             RewardPanelView rewardPanel = CreateRewardPanel(stage, entryPrefab);
+            CashOutPanelView cashOutPanel = CreateCashOutPanel(stage);
             WheelView wheel = CreateWheel(stage, slicePrefab);
 
             Image flyingIcon = Img(Rect("ui_image_flying_icon_value", canvas, Vector2.zero, new Vector2(110f, 110f)), null);
@@ -425,7 +453,8 @@ namespace WheelOfFortune.EditorTools
             var controller = canvasGo.AddComponent<GameController>();
             Set(controller,
                 ("_settings", settings), ("_wheel", wheel), ("_zoneBar", zoneBar),
-                ("_rewardPanel", rewardPanel), ("_popup", popup), ("_receiptPopup", receiptPopup),
+                ("_rewardPanel", rewardPanel), ("_cashOutPanel", cashOutPanel),
+                ("_popup", popup), ("_receiptPopup", receiptPopup),
                 ("_bombPopup.Title", "BOMB EXPLODED!\nALL REWARDS ARE LOST"),
                 ("_bombPopup.Icon", LoadSprite(RewardSprites, "ui_card_icon_death")),
                 ("_bombPopup.ButtonLabel", "GIVE UP"),
@@ -440,6 +469,7 @@ namespace WheelOfFortune.EditorTools
             var preview = new WheelSession(settings, _ => 0);
             wheel.Show(preview);
             zoneBar.Show(preview.Zone, settings);
+            cashOutPanel.Show(preview.CanLeave, GameSettings.NextZone(preview.Zone, settings.SafeZoneInterval));
             foreach (Graphic graphic in wheel.GetComponentsInChildren<Graphic>(true))
                 PrefabUtility.RecordPrefabInstancePropertyModifications(graphic);
             foreach (RectTransform transform in wheel.GetComponentsInChildren<RectTransform>(true))
@@ -448,82 +478,91 @@ namespace WheelOfFortune.EditorTools
             EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene(), ScenePath);
         }
 
-        private static ZoneBarView CreateZoneBar(RectTransform canvas)
+        private static ZoneBarView CreateZoneBar(RectTransform stage)
         {
             Vector2 top = new(0.5f, 1f);
-            RectTransform bar = Rect("ui_zone_bar", canvas, new Vector2(-120f, -32f), new Vector2(ZoneItemWidth * 11 + 32f, 76f), top, top);
+            RectTransform bar = Rect("ui_zone_bar", stage, new Vector2(0f, -32f), new Vector2(ZoneItemWidth * ZoneVisibleCount + 32f, 76f), top, top);
             var view = bar.gameObject.AddComponent<ZoneBarView>();
-            Img(Stretch("ui_image_zone_bar_bg", bar), Common("ui_card_panel_zone_bg"), sliced: true);
+            Img(Stretch("ui_image_zone_bar_bg", bar), Common("ui_card_panel_zone_coming"), sliced: true)
+                .color = new Color(0.065f, 0.085f, 0.12f, 0.95f);
 
             RectTransform viewport = Stretch("ui_zone_bar_viewport", bar, 8f);
             viewport.gameObject.AddComponent<RectMask2D>();
-            Image highlight = Img(Rect("ui_image_zone_current_value", viewport, Vector2.zero, new Vector2(ZoneItemWidth - 6f, 64f)),
-                Common("ui_card_panel_zone_current_white"), sliced: true, maskable: true);
+            // Flat tinted tile for the current zone; ZoneBarView colors it by zone type.
+            Image highlight = Img(Rect("ui_image_zone_current_value", viewport, Vector2.zero, new Vector2(ZoneItemWidth - 8f, 56f)),
+                Common("ui_card_panel_zone_coming"), sliced: true, maskable: true);
 
             RectTransform content = Rect("ui_zone_bar_content", viewport, Vector2.zero, new Vector2(ZoneItemWidth * ZoneLabelCount, 64f));
             var labels = new TMP_Text[ZoneLabelCount];
             for (int i = 0; i < ZoneLabelCount; i++)
             {
                 float x = (i - ZoneLabelCount / 2) * ZoneItemWidth;
-                labels[i] = Text(Rect($"ui_text_zone_{i}_value", content, new Vector2(x, 0f), new Vector2(ZoneItemWidth, 64f)),
-                    string.Empty, ValueSize, Color.white, maskable: true);
-                labels[i].fontStyle = FontStyles.Bold;
+                labels[i] = Heading(Text(Rect($"ui_text_zone_{i}_value", content, new Vector2(x, 0f), new Vector2(ZoneItemWidth, 64f)),
+                    string.Empty, ValueSize, Color.white, maskable: true));
             }
 
-            Img(Rect("ui_image_zone_current_frame", viewport, Vector2.zero, new Vector2(ZoneItemWidth + 4f, 74f)),
+            Image frame = Img(Rect("ui_image_zone_current_frame_value", viewport, Vector2.zero, new Vector2(ZoneItemWidth + 2f, 70f)),
                 Common("ui_card_zone_map_frame"), sliced: true, maskable: true);
-            Img(Stretch("ui_image_zone_bar_frame", bar), Common("ui_card_frame_4px_zone"), sliced: true).color = new Color(1f, 1f, 1f, 0.35f);
+            Img(Stretch("ui_image_zone_bar_frame", bar), Common("ui_card_frame_4px_zone"), sliced: true).color = new Color(0.4f, 0.5f, 0.65f, 0.35f);
 
-            // Next safe / super zone boxes (top right corner)
-            Vector2 topRight = new(1f, 1f);
-            TMP_Text nextSuper = ZoneInfoBox(canvas, "ui_zone_info_super", "SUPER ZONE", new Vector2(-24f, -32f),
-                Common("ui_card_panel_zone_current_white"), new Color(1f, 0.76f, 0.25f), new Color(0.2f, 0.12f, 0f), topRight);
-            TMP_Text nextSafe = ZoneInfoBox(canvas, "ui_zone_info_safe", "SAFE ZONE", new Vector2(-24f, -108f),
-                Common("ui_card_panel_zone_super"), Color.white, Color.white, topRight);
+            // Upcoming milestones flank the strip and line up with the side columns below.
+            float y = bar.anchoredPosition.y - 38f;
+            TMP_Text nextSafe = ZoneInfoBox(stage, "ui_zone_info_safe", "NEXT SAFE ZONE", new Vector2(-ColumnX, y),
+                new Color(0.55f, 0.9f, 0.3f));
+            TMP_Text nextSuper = ZoneInfoBox(stage, "ui_zone_info_super", "NEXT SUPER ZONE", new Vector2(ColumnX, y),
+                new Color(1f, 0.76f, 0.25f));
 
             Set(view, ("_content", content), ("_zoneTexts", labels), ("_currentHighlight", highlight),
+                ("_currentFrame", (RectTransform)frame.transform),
                 ("_nextSafeText", nextSafe), ("_nextSuperText", nextSuper), ("_itemWidth", ZoneItemWidth));
             return view;
         }
 
-        private static TMP_Text ZoneInfoBox(RectTransform canvas, string boxName, string label, Vector2 position,
-            Sprite sprite, Color tint, Color textColor, Vector2 anchor)
+        /// <summary>Informational legend: dark flat card with an accent outline, never a filled button shape.</summary>
+        private static TMP_Text ZoneInfoBox(RectTransform stage, string boxName, string label, Vector2 position, Color accent)
         {
-            RectTransform box = Rect(boxName, canvas, position, new Vector2(260f, 64f), anchor, anchor);
-            Img(Stretch($"ui_image_{boxName}_bg", box), sprite, sliced: true).color = tint;
-            Text(Rect($"ui_text_{boxName}_label", box, new Vector2(16f, 0f), new Vector2(166f, 54f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f)),
-                label, 22f, textColor, TextAlignmentOptions.Left);
-            var value = Text(Rect($"ui_text_{boxName}_value", box, new Vector2(-16f, 0f), new Vector2(64f, 54f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f)),
-                "0", ValueSize, textColor, TextAlignmentOptions.Right);
-            value.fontStyle = FontStyles.Bold;
+            Vector2 top = new(0.5f, 1f), left = new(0f, 0.5f), right = new(1f, 0.5f);
+            RectTransform box = Rect(boxName, stage, position, new Vector2(ColumnWidth, 64f), top, new Vector2(0.5f, 0.5f));
+            Img(Stretch($"ui_image_{boxName}_bg", box), Common("ui_card_panel_zone_coming"), sliced: true)
+                .color = new Color(0.065f, 0.085f, 0.12f, 0.95f);
+            Img(Stretch($"ui_image_{boxName}_frame", box), Common("ui_card_frame_4px_zone"), sliced: true)
+                .color = new Color(accent.r, accent.g, accent.b, 0.55f);
+            Img(Rect($"ui_image_{boxName}_accent", box, new Vector2(10f, 0f), new Vector2(6f, 36f), left, left),
+                Common("ui_card_panel_zone_coming"), sliced: true).color = accent;
+            Text(Rect($"ui_text_{boxName}_label", box, new Vector2(28f, 0f), new Vector2(200f, 54f), left, left),
+                label, 20f, MutedText, TextAlignmentOptions.Left).characterSpacing = 1f;
+            var value = Heading(Text(Rect($"ui_text_{boxName}_value", box, new Vector2(-18f, 0f), new Vector2(80f, 54f), right, right),
+                "0", ValueSize, accent, TextAlignmentOptions.Right));
             value.enableAutoSizing = true;
             value.fontSizeMin = 18f;
             value.fontSizeMax = ValueSize;
             return value;
         }
 
-        private static RewardPanelView CreateRewardPanel(RectTransform canvas, RewardEntryView entryPrefab)
+        /// <summary>Shared dark card used by both side columns.</summary>
+        private static RectTransform SidePanel(RectTransform stage, string panelName, float x, string title)
         {
-            RectTransform panel = Rect("ui_reward_panel", canvas, new Vector2(-415f, -70f), new Vector2(330f, 640f));
-            var view = panel.gameObject.AddComponent<RewardPanelView>();
-            Img(Stretch("ui_image_reward_panel_bg", panel), Common("ui_card_panel_zone_coming"), sliced: true)
+            RectTransform panel = Rect(panelName, stage, new Vector2(x, -88f), new Vector2(ColumnWidth, 600f));
+            Img(Stretch($"ui_image_{panelName}_bg", panel), Common("ui_card_panel_zone_coming"), sliced: true)
                 .color = new Color(0.065f, 0.085f, 0.12f, 0.95f);
-            Img(Stretch("ui_image_reward_panel_frame", panel), Common("ui_card_frame_4px_zone"), sliced: true)
+            Img(Stretch($"ui_image_{panelName}_frame", panel), Common("ui_card_frame_4px_zone"), sliced: true)
                 .color = new Color(0.4f, 0.5f, 0.65f, 0.22f);
-
             Vector2 top = new(0.5f, 1f);
-            Text(Rect("ui_text_reward_panel_title", panel, new Vector2(0f, -22f), new Vector2(290f, 42f), top, top),
-                "COLLECTED REWARDS", LabelSize, Color.white);
-            Img(Rect("ui_image_reward_panel_divider", panel, new Vector2(0f, -76f), new Vector2(278f, 2f), top, top), null)
+            Text(Rect($"ui_text_{panelName}_title", panel, new Vector2(0f, -22f), new Vector2(290f, 42f), top, top),
+                title, LabelSize, Color.white).characterSpacing = 1f;
+            Img(Rect($"ui_image_{panelName}_divider", panel, new Vector2(0f, -76f), new Vector2(ColumnWidth - 52f, 2f), top, top), null)
                 .color = new Color(0.4f, 0.5f, 0.65f, 0.25f);
-            Vector2 bottom = new(0.5f, 0f);
-            Button exit = CreateButton(Rect("ui_button_exit", panel, new Vector2(0f, 22f), new Vector2(282f, 72f), bottom, bottom),
-                Common("UI_button_orange_standard"), "EXIT", "ui_text_exit");
-            exit.transition = Selectable.Transition.SpriteSwap;
-            exit.spriteState = new SpriteState { disabledSprite = Common("UI_button_grey_standard") };
+            return panel;
+        }
+
+        private static RewardPanelView CreateRewardPanel(RectTransform stage, RewardEntryView entryPrefab)
+        {
+            RectTransform panel = SidePanel(stage, "ui_reward_panel", -ColumnX, "COLLECTED REWARDS");
+            var view = panel.gameObject.AddComponent<RewardPanelView>();
+            Vector2 top = new(0.5f, 1f);
 
             RectTransform scroll = Stretch("ui_reward_scroll", panel);
-            scroll.offsetMin = new Vector2(20f, 158f);
+            scroll.offsetMin = new Vector2(20f, 20f);
             scroll.offsetMax = new Vector2(-20f, -94f);
             Img(scroll, null, raycast: true).color = Color.clear; // raycast surface needed for dragging the list
             scroll.gameObject.AddComponent<RectMask2D>();
@@ -544,7 +583,7 @@ namespace WheelOfFortune.EditorTools
             scrollRect.horizontal = false;
             scrollRect.movementType = ScrollRect.MovementType.Clamped;
 
-            var empty = Rect("ui_reward_empty_state_value", panel, new Vector2(0f, 20f), new Vector2(270f, 200f));
+            var empty = Rect("ui_reward_empty_state_value", panel, new Vector2(0f, -30f), new Vector2(270f, 200f));
             Img(Rect("ui_image_reward_empty_icon", empty, new Vector2(0f, 48f), new Vector2(130f, 74f)),
                 LoadSprite(RewardSprites, "UI_icon_chest_small_noligt")).color = new Color(1f, 1f, 1f, 0.45f);
             Text(Rect("ui_text_reward_empty_title", empty, new Vector2(0f, -16f), new Vector2(270f, 36f)),
@@ -552,27 +591,54 @@ namespace WheelOfFortune.EditorTools
             var emptyHint = Text(Rect("ui_text_reward_empty_hint", empty, new Vector2(0f, -62f), new Vector2(270f, 56f)),
                 "Spin the wheel to\nbuild your rewards", 21f, MutedText);
             emptyHint.textWrappingMode = TextWrappingModes.Normal;
-            var collectHint = Text(Rect("ui_text_reward_collect_hint", panel, new Vector2(0f, 102f), new Vector2(288f, 56f), bottom, bottom),
-                "Collect in a safe\nor super zone", 20f, MutedText);
-            collectHint.textWrappingMode = TextWrappingModes.Normal;
             Set(view, ("_entryPrefab", entryPrefab), ("_content", content), ("_emptyState", empty.gameObject));
             return view;
         }
 
-        private static WheelView CreateWheel(RectTransform canvas, WheelSliceView slicePrefab)
+        /// <summary>Right column mirrors the rewards list: whether leaving is possible, and the button that does it.</summary>
+        private static CashOutPanelView CreateCashOutPanel(RectTransform stage)
         {
-            RectTransform wheel = Rect("ui_wheel", canvas, new Vector2(170f, -65f), new Vector2(WheelSize, WheelSize));
+            RectTransform panel = SidePanel(stage, "ui_cash_out_panel", ColumnX, "CASH OUT");
+            var view = panel.gameObject.AddComponent<CashOutPanelView>();
+
+            Image glow = Img(Rect("ui_image_cash_out_glow", panel, new Vector2(0f, 90f), new Vector2(360f, 260f)), Common("star_glow_alpha"));
+            glow.preserveAspect = false;
+            glow.color = new Color(1f, 0.7f, 0.3f, 0.18f);
+            Image icon = Img(Rect("ui_image_cash_out_icon_value", panel, new Vector2(0f, 90f), new Vector2(230f, 110f)),
+                LoadSprite(RewardSprites, "UI_icon_chest_big_nolight"));
+            TMP_Text status = Text(Rect("ui_text_cash_out_status_value", panel, new Vector2(0f, -60f), new Vector2(290f, 80f)),
+                string.Empty, 22f, MutedText);
+            status.textWrappingMode = TextWrappingModes.Normal;
+            status.lineSpacing = 8f;
+
+            Vector2 bottom = new(0.5f, 0f);
+            Button exit = CreateButton(Rect("ui_button_exit", panel, new Vector2(0f, 24f), new Vector2(ColumnWidth - 48f, 80f), bottom, bottom),
+                Common("UI_button_orange_standard"), "COLLECT", "ui_text_exit_value");
+            exit.transition = Selectable.Transition.SpriteSwap;
+            exit.spriteState = new SpriteState { disabledSprite = Common("UI_button_grey_standard") };
+            AddShadow(exit.gameObject, 4f);
+
+            Set(view, ("_buttonImage", exit.targetGraphic), ("_buttonText", exit.GetComponentInChildren<TMP_Text>()),
+                ("_statusText", status), ("_icon", icon));
+            return view;
+        }
+
+        private static WheelView CreateWheel(RectTransform stage, WheelSliceView slicePrefab)
+        {
+            RectTransform wheel = Rect("ui_wheel", stage, new Vector2(0f, -88f), new Vector2(WheelSize, WheelSize));
             var view = wheel.gameObject.AddComponent<WheelView>();
 
-            Image glow = Img(Rect("ui_image_wheel_glow", wheel, Vector2.zero, new Vector2(900f, 900f)), Common("star_glow_alpha"));
-            glow.color = new Color(0.5f, 0.7f, 1f, 0.10f);
+            // Tinted per tier by WheelView, so bronze/silver/golden each light the stage differently.
+            Image glow = Img(Rect("ui_image_wheel_glow_value", wheel, Vector2.zero, new Vector2(980f, 980f)), Common("star_glow_alpha"));
+            Image backdrop = Img(Rect("ui_image_wheel_backdrop", wheel, new Vector2(0f, -10f), new Vector2(WheelSize * 1.12f, WheelSize * 1.12f)),
+                Common("star_glow_alpha"));
+            backdrop.color = new Color(0f, 0f, 0f, 0.55f); // soft contact shadow lifting the wheel off the background
 
-            TMP_Text title = Text(Rect("ui_text_wheel_title_value", wheel, new Vector2(0f, WheelSize * 0.5f + 74f), new Vector2(WheelSize, 60f)),
-                "BRONZE SPIN", TitleSize, Color.white);
-            title.fontStyle = FontStyles.Bold;
-            title.characterSpacing = 5f;
-            TMP_Text hint = Text(Rect("ui_text_wheel_zone_hint_value", wheel, new Vector2(0f, -WheelSize * 0.5f - 55f), new Vector2(650f, 40f)),
+            TMP_Text title = Heading(Text(Rect("ui_text_wheel_title_value", wheel, new Vector2(0f, WheelSize * 0.5f + 70f), new Vector2(WheelSize, 60f)),
+                "BRONZE SPIN", TitleSize, Color.white), 5f);
+            TMP_Text hint = Text(Rect("ui_text_wheel_zone_hint_value", wheel, new Vector2(0f, -WheelSize * 0.5f - 34f), new Vector2(650f, 40f)),
                 string.Empty, 22f, MutedText);
+            hint.characterSpacing = 2f;
 
             RectTransform rotator = Stretch("ui_wheel_rotator", wheel);
             Image baseImage = Img(Stretch("ui_image_wheel_base_value", rotator), Common("ui_spin_bronze_base"));
@@ -580,23 +646,48 @@ namespace WheelOfFortune.EditorTools
             var slices = new WheelSliceView[WheelDefinition.SliceCount];
             for (int i = 0; i < slices.Length; i++)
             {
-                // Slice i is placed i * 45 degrees clockwise from the top and turned to face outward.
+                // Slice i is placed i * 45 degrees clockwise from the top. WheelView keeps its content upright while spinning.
                 float angle = i * 360f / slices.Length;
                 var slice = (WheelSliceView)PrefabUtility.InstantiatePrefab(slicePrefab, rotator);
                 slice.name = $"ui_wheel_slice_{i}";
                 var rt = (RectTransform)slice.transform;
                 rt.anchoredPosition = new Vector2(Mathf.Sin(angle * Mathf.Deg2Rad), Mathf.Cos(angle * Mathf.Deg2Rad)) * SliceRadius;
-                rt.localEulerAngles = new Vector3(0f, 0f, -angle);
+                rt.localEulerAngles = Vector3.zero;
                 slices[i] = slice;
             }
 
-            Image indicator = Img(Rect("ui_image_wheel_indicator_value", wheel, new Vector2(0f, WheelSize * 0.45f), new Vector2(70f, 96f)),
-                Common("ui_spin_bronze_indicator"));
-            CreateButton(Rect("ui_button_spin", wheel, Vector2.zero, new Vector2(170f, 170f)), Common("ui_spin_generic_button"), null, null);
+            // Drawn at the same scale as the wheel base art (600 / 485) so the pointer stays as sharp as the base.
+            float artScale = WheelSize / 485f;
+            Image indicator = Img(Rect("ui_image_wheel_indicator_value", wheel, new Vector2(0f, WheelSize * 0.47f),
+                new Vector2(43f * artScale, 59f * artScale)), Common("ui_spin_bronze_indicator"));
+            AddShadow(indicator.gameObject, 5f);
 
-            Set(view, ("_rotator", rotator), ("_glow", (RectTransform)glow.transform), ("_baseImage", baseImage),
+            RectTransform pulse = Rect("ui_spin_pulse", wheel, Vector2.zero, new Vector2(134f * artScale, 134f * artScale));
+            Image halo = Img(Rect("ui_image_spin_halo", pulse, Vector2.zero, new Vector2(300f, 300f)), Common("star_glow_alpha"));
+            halo.color = new Color(0.45f, 0.65f, 1f, 0.55f);
+            Button spin = CreateButton(Stretch("ui_button_spin", pulse), Common("ui_spin_generic_button"), null, null);
+            spin.colors = new ColorBlock
+            {
+                normalColor = Color.white,
+                highlightedColor = Color.white,
+                pressedColor = new Color(0.75f, 0.78f, 0.85f),
+                selectedColor = Color.white,
+                disabledColor = new Color(0.6f, 0.6f, 0.65f, 0.75f),
+                colorMultiplier = 1f,
+                fadeDuration = 0.08f
+            };
+            AddShadow(spin.gameObject, 6f);
+
+            Set(view, ("_rotator", rotator), ("_glow", glow), ("_spinPulse", pulse), ("_baseImage", baseImage),
                 ("_indicatorImage", indicator), ("_titleText", title), ("_zoneHintText", hint), ("_slices", slices));
             return view;
+        }
+
+        private static void AddShadow(GameObject target, float distance)
+        {
+            var shadow = target.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0f, 0f, 0f, 0.6f);
+            shadow.effectDistance = new Vector2(0f, -distance);
         }
 
         private static ResultPopupView CreatePopup(RectTransform canvas)
@@ -606,7 +697,7 @@ namespace WheelOfFortune.EditorTools
             Vector2 top = new(0.5f, 1f), bottom = new(0.5f, 0f);
             TMP_Text title = Text(Rect("ui_text_popup_title_value", panel, new Vector2(0f, -40f), new Vector2(700f, 130f), top, top),
                 string.Empty, TitleSize, Color.white);
-            title.fontStyle = FontStyles.Bold;
+            Heading(title);
             title.textWrappingMode = TextWrappingModes.Normal;
             Image icon = Img(Rect("ui_image_popup_icon_value", panel, new Vector2(0f, 10f), new Vector2(340f, 340f)), null);
             Button close = CreateButton(Rect("ui_button_popup_close", panel, new Vector2(0f, 40f), new Vector2(340f, 100f), bottom, bottom),
@@ -627,7 +718,7 @@ namespace WheelOfFortune.EditorTools
             Vector2 top = new(0.5f, 1f), bottom = new(0.5f, 0f);
             TMP_Text title = Text(Rect("ui_text_popup_title_value", panel, new Vector2(0f, -40f), new Vector2(1000f, 70f), top, top),
                 string.Empty, TitleSize, Color.white);
-            title.fontStyle = FontStyles.Bold;
+            Heading(title);
             Image icon = Img(Rect("ui_image_popup_icon_value", panel, new Vector2(0f, -118f), new Vector2(240f, 160f), top, top), null);
 
             RectTransform scroll = Stretch("ui_receipt_scroll", panel);
@@ -714,12 +805,14 @@ namespace WheelOfFortune.EditorTools
             return image;
         }
 
+        private static Material _headingMaterial;
+
         private static TMP_Text Text(RectTransform rt, string text, float size, Color color,
             TextAlignmentOptions alignment = TextAlignmentOptions.Center, bool maskable = false)
         {
             var label = rt.gameObject.AddComponent<TextMeshProUGUI>();
             label.text = text;
-            label.font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset");
+            label.font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontPath);
             label.fontSize = size;
             label.fontStyle = FontStyles.Normal;
             label.color = color;
@@ -727,6 +820,16 @@ namespace WheelOfFortune.EditorTools
             label.textWrappingMode = TextWrappingModes.NoWrap;
             label.raycastTarget = false;
             label.maskable = maskable;
+            return label;
+        }
+
+        /// <summary>Bold display style with the shared drop-shadow material.</summary>
+        private static TMP_Text Heading(TMP_Text label, float spacing = 0f)
+        {
+            if (_headingMaterial == null) _headingMaterial = HeadingMaterial();
+            label.fontSharedMaterial = _headingMaterial;
+            label.fontStyle = FontStyles.Bold;
+            label.characterSpacing = spacing;
             return label;
         }
 
@@ -738,9 +841,7 @@ namespace WheelOfFortune.EditorTools
             button.navigation = new Navigation { mode = Navigation.Mode.None };
             if (label != null)
             {
-                var text = Text(Stretch(labelName, rt), label, ValueSize, Color.white);
-                text.fontStyle = FontStyles.Bold;
-                text.characterSpacing = 2f;
+                Heading(Text(Stretch(labelName, rt), label, ValueSize, Color.white), 2f);
             }
             return button;
         }

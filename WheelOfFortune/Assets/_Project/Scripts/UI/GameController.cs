@@ -18,6 +18,7 @@ namespace WheelOfFortune.UI
         [SerializeField] private WheelView _wheel;
         [SerializeField] private ZoneBarView _zoneBar;
         [SerializeField] private RewardPanelView _rewardPanel;
+        [SerializeField] private CashOutPanelView _cashOutPanel;
         [SerializeField] private ResultPopupView _popup;
         [SerializeField] private ResultPopupView _receiptPopup;
         [SerializeField] private PopupContent _bombPopup;
@@ -103,6 +104,7 @@ namespace WheelOfFortune.UI
         {
             _wheel.Show(_session);
             _zoneBar.Show(_session.Zone, _settings);
+            _cashOutPanel.Show(_session.CanLeave, GameSettings.NextZone(_session.Zone, _settings.SafeZoneInterval));
             SetSpinning(_isSpinning);
         }
 
@@ -111,6 +113,7 @@ namespace WheelOfFortune.UI
             _isSpinning = value;
             _spinButton.interactable = !value;
             _exitButton.interactable = !value && _session.CanLeave;
+            _wheel.SetSpinReady(!value);
         }
 
 #if UNITY_EDITOR
