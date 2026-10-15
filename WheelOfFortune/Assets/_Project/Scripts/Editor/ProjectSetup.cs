@@ -66,7 +66,8 @@ namespace WheelOfFortune.EditorTools
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             WheelSliceView slicePrefab = CreateSlicePrefab();
             RewardEntryView entryPrefab = CreateRewardEntryPrefab();
-            CreateScene(settings, slicePrefab, entryPrefab);
+            ReceiptEntryView receiptEntryPrefab = CreateReceiptEntryPrefab();
+            CreateScene(settings, slicePrefab, entryPrefab, receiptEntryPrefab);
 
             AssetDatabase.SaveAssets();
             Debug.Log("Wheel Of Fortune setup complete.");
@@ -96,10 +97,11 @@ namespace WheelOfFortune.EditorTools
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             WheelSliceView slicePrefab = CreateSlicePrefab();
             RewardEntryView entryPrefab = CreateRewardEntryPrefab();
+            ReceiptEntryView receiptEntryPrefab = CreateReceiptEntryPrefab();
             // Importing dependent assets can invalidate previously loaded native objects.
             var settings = AssetDatabase.LoadAssetAtPath<GameSettings>($"{Root}/Data/game_settings.asset");
             if (settings == null) throw new System.InvalidOperationException("Game settings asset is missing.");
-            CreateScene(settings, slicePrefab, entryPrefab);
+            CreateScene(settings, slicePrefab, entryPrefab, receiptEntryPrefab);
             AssetDatabase.SaveAssets();
             Debug.Log("Wheel Of Fortune presentation refreshed; game data preserved.");
         }
@@ -350,6 +352,27 @@ namespace WheelOfFortune.EditorTools
             return SavePrefab(root, "ui_reward_entry").GetComponent<RewardEntryView>();
         }
 
+        private static ReceiptEntryView CreateReceiptEntryPrefab()
+        {
+            RectTransform root = Rect("ui_receipt_entry", null, Vector2.zero, new Vector2(480f, 84f));
+            Img(Stretch("ui_image_receipt_entry_bg", root), Common("ui_card_panel_zone_coming"), sliced: true, maskable: true)
+                .color = new Color(0.13f, 0.17f, 0.23f, 0.85f);
+            var view = root.gameObject.AddComponent<ReceiptEntryView>();
+            Vector2 left = new(0f, 0.5f), right = new(1f, 0.5f);
+            Image icon = Img(Rect("ui_image_receipt_icon_value", root, new Vector2(14f, 0f), new Vector2(86f, 64f), left, left),
+                null, maskable: true);
+            TMP_Text rewardName = Text(Rect("ui_text_receipt_name_value", root, new Vector2(112f, 0f), new Vector2(220f, 60f), left, left),
+                string.Empty, LabelSize, MutedText, TextAlignmentOptions.Left, maskable: true);
+            rewardName.enableAutoSizing = true;
+            rewardName.fontSizeMin = 16f;
+            rewardName.fontSizeMax = LabelSize;
+            TMP_Text amount = Text(Rect("ui_text_receipt_amount_value", root, new Vector2(-16f, 0f), new Vector2(124f, 60f), right, right),
+                string.Empty, ValueSize, Color.white, TextAlignmentOptions.Right, maskable: true);
+            amount.fontStyle = FontStyles.Bold;
+            Set(view, ("_icon", icon), ("_nameText", rewardName), ("_amountText", amount));
+            return SavePrefab(root, "ui_receipt_entry").GetComponent<ReceiptEntryView>();
+        }
+
         private static GameObject SavePrefab(RectTransform root, string prefabName)
         {
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root.gameObject, $"{Root}/Prefabs/{prefabName}.prefab");
@@ -359,7 +382,8 @@ namespace WheelOfFortune.EditorTools
 
         // ---------- Scene ----------
 
-        private static void CreateScene(GameSettings settings, WheelSliceView slicePrefab, RewardEntryView entryPrefab)
+        private static void CreateScene(GameSettings settings, WheelSliceView slicePrefab, RewardEntryView entryPrefab,
+            ReceiptEntryView receiptEntryPrefab)
         {
             var cameraGo = new GameObject("main_camera", typeof(Camera));
             var camera = cameraGo.GetComponent<Camera>();
@@ -396,11 +420,12 @@ namespace WheelOfFortune.EditorTools
             Set(rewardPanel, ("_flyingIcon", flyingIcon));
 
             ResultPopupView popup = CreatePopup(canvas);
+            ResultPopupView receiptPopup = CreateReceiptPopup(canvas, receiptEntryPrefab);
 
             var controller = canvasGo.AddComponent<GameController>();
             Set(controller,
                 ("_settings", settings), ("_wheel", wheel), ("_zoneBar", zoneBar),
-                ("_rewardPanel", rewardPanel), ("_popup", popup),
+                ("_rewardPanel", rewardPanel), ("_popup", popup), ("_receiptPopup", receiptPopup),
                 ("_bombPopup.Title", "BOMB EXPLODED!\nALL REWARDS ARE LOST"),
                 ("_bombPopup.Icon", LoadSprite(RewardSprites, "ui_card_icon_death")),
                 ("_bombPopup.ButtonLabel", "GIVE UP"),
@@ -409,6 +434,7 @@ namespace WheelOfFortune.EditorTools
                 ("_collectedPopup.ButtonLabel", "PLAY AGAIN"));
             RunOnValidate(controller);
             RunOnValidate(popup);
+            RunOnValidate(receiptPopup);
 
             // Editor preview: show zone 1 so the scene is not full of empty placeholders. Play mode overwrites this.
             var preview = new WheelSession(settings, _ => 0);
@@ -575,12 +601,7 @@ namespace WheelOfFortune.EditorTools
 
         private static ResultPopupView CreatePopup(RectTransform canvas)
         {
-            RectTransform root = Stretch("ui_popup_result", canvas);
-            Img(Stretch("ui_image_popup_blocker", root), null, raycast: true).color = new Color(0f, 0f, 0f, 0.8f); // blocks input behind
-
-            RectTransform panel = Rect("ui_popup_panel", root, Vector2.zero, new Vector2(760f, 720f));
-            Img(Stretch("ui_image_popup_bg", panel), Common("ui_card_panel_zone_bg"), sliced: true);
-            Img(Stretch("ui_image_popup_frame", panel), Common("ui_card_frame_12px_neutral"), sliced: true);
+            (RectTransform root, RectTransform panel) = PopupShell(canvas, "ui_popup_result", new Vector2(760f, 720f));
 
             Vector2 top = new(0.5f, 1f), bottom = new(0.5f, 0f);
             TMP_Text title = Text(Rect("ui_text_popup_title_value", panel, new Vector2(0f, -40f), new Vector2(700f, 130f), top, top),
@@ -596,6 +617,65 @@ namespace WheelOfFortune.EditorTools
                 ("_buttonText", close.GetComponentInChildren<TMP_Text>()));
             root.gameObject.SetActive(false);
             return view;
+        }
+
+        /// <summary>Cash-out popup: a larger panel whose middle is a scrollable two-column list of everything collected.</summary>
+        private static ResultPopupView CreateReceiptPopup(RectTransform canvas, ReceiptEntryView entryPrefab)
+        {
+            (RectTransform root, RectTransform panel) = PopupShell(canvas, "ui_popup_receipt", new Vector2(1080f, 900f));
+
+            Vector2 top = new(0.5f, 1f), bottom = new(0.5f, 0f);
+            TMP_Text title = Text(Rect("ui_text_popup_title_value", panel, new Vector2(0f, -40f), new Vector2(1000f, 70f), top, top),
+                string.Empty, TitleSize, Color.white);
+            title.fontStyle = FontStyles.Bold;
+            Image icon = Img(Rect("ui_image_popup_icon_value", panel, new Vector2(0f, -118f), new Vector2(240f, 160f), top, top), null);
+
+            RectTransform scroll = Stretch("ui_receipt_scroll", panel);
+            scroll.offsetMin = new Vector2(40f, 170f);
+            scroll.offsetMax = new Vector2(-40f, -300f);
+            Img(scroll, Common("ui_card_panel_zone_coming"), sliced: true, raycast: true) // raycast surface needed for dragging the list
+                .color = new Color(0.04f, 0.055f, 0.08f, 0.6f);
+            scroll.gameObject.AddComponent<RectMask2D>();
+
+            RectTransform content = Rect("ui_receipt_content", scroll, Vector2.zero, Vector2.zero, top, top);
+            content.anchorMin = new Vector2(0f, 1f);
+            content.anchorMax = new Vector2(1f, 1f);
+            var grid = content.gameObject.AddComponent<GridLayoutGroup>();
+            grid.cellSize = new Vector2(480f, 84f);
+            grid.spacing = new Vector2(16f, 12f);
+            grid.padding = new RectOffset(0, 0, 12, 12);
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = 2;
+            grid.childAlignment = TextAnchor.UpperCenter;
+            content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            var scrollRect = scroll.gameObject.AddComponent<ScrollRect>();
+            scrollRect.content = content;
+            scrollRect.viewport = scroll;
+            scrollRect.horizontal = false;
+            scrollRect.movementType = ScrollRect.MovementType.Clamped;
+
+            Button close = CreateButton(Rect("ui_button_popup_close", panel, new Vector2(0f, 40f), new Vector2(340f, 100f), bottom, bottom),
+                Common("UI_button_orange_standard"), string.Empty, "ui_text_popup_button_value");
+
+            var view = root.gameObject.AddComponent<ResultPopupView>(); // added last so OnValidate finds the button
+            Set(view, ("_panel", panel), ("_titleText", title), ("_icon", icon),
+                ("_buttonText", close.GetComponentInChildren<TMP_Text>()),
+                ("_receiptEntryPrefab", entryPrefab), ("_receiptContent", content));
+            root.gameObject.SetActive(false);
+            return view;
+        }
+
+        /// <summary>Full-screen input blocker plus a framed panel of the given size.</summary>
+        private static (RectTransform root, RectTransform panel) PopupShell(RectTransform canvas, string objectName, Vector2 size)
+        {
+            RectTransform root = Stretch(objectName, canvas);
+            Img(Stretch("ui_image_popup_blocker", root), null, raycast: true).color = new Color(0f, 0f, 0f, 0.8f); // blocks input behind
+
+            RectTransform panel = Rect("ui_popup_panel", root, Vector2.zero, size);
+            Img(Stretch("ui_image_popup_bg", panel), Common("ui_card_panel_zone_bg"), sliced: true);
+            Img(Stretch("ui_image_popup_frame", panel), Common("ui_card_frame_12px_neutral"), sliced: true);
+            return (root, panel);
         }
 
         // ---------- Small UI helpers ----------

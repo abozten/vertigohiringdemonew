@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using WheelOfFortune.Core;
@@ -18,6 +19,7 @@ namespace WheelOfFortune.UI
         [SerializeField] private ZoneBarView _zoneBar;
         [SerializeField] private RewardPanelView _rewardPanel;
         [SerializeField] private ResultPopupView _popup;
+        [SerializeField] private ResultPopupView _receiptPopup;
         [SerializeField] private PopupContent _bombPopup;
         [SerializeField] private PopupContent _collectedPopup;
         [SerializeField] private Button _spinButton;
@@ -32,6 +34,13 @@ namespace WheelOfFortune.UI
             _spinButton.onClick.AddListener(Spin);
             _exitButton.onClick.AddListener(Leave);
             _popup.Closed += Restart;
+            if (_receiptPopup == null)
+            {
+                // Scenes built before the receipt existed: keep working with the plain popup until the scene is rebuilt.
+                Debug.LogWarning("Receipt popup is not assigned. Run Tools > Wheel Of Fortune > Refresh Presentation.", this);
+                _receiptPopup = _popup;
+            }
+            else _receiptPopup.Closed += Restart;
         }
 
         private void OnDestroy()
@@ -39,6 +48,7 @@ namespace WheelOfFortune.UI
             _spinButton.onClick.RemoveListener(Spin);
             _exitButton.onClick.RemoveListener(Leave);
             _popup.Closed -= Restart;
+            if (_receiptPopup != _popup) _receiptPopup.Closed -= Restart;
         }
 
         private void Start() => Refresh();
@@ -75,7 +85,10 @@ namespace WheelOfFortune.UI
         {
             if (_isSpinning || !_session.CanLeave) return;
             SetSpinning(true);
-            _popup.Show(_collectedPopup);
+
+            // Snapshot the totals so the receipt is independent of the session, which is reset when it closes.
+            var receipt = new List<KeyValuePair<RewardDefinition, int>>(_session.Rewards);
+            _receiptPopup.Show(_collectedPopup, receipt);
         }
 
         private void Restart()
